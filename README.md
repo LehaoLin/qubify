@@ -5,8 +5,9 @@
 A constraint-to-QUBO compiler for quantum optimization. Convert optimization problems into QUBO matrices — no hardware lock-in, no solver dependency. Feed the output to CIM, D-Wave, Fujitsu DA, simulated annealing, or any QUBO solver.
 
 ```bash
-pip install qubify
+pip install git+https://github.com/LehaoLin/qubify.git
 ```
+*(Coming to PyPI — `pip install qubify` — once published.)*
 
 ---
 
@@ -158,13 +159,15 @@ Problem (dict) → qubify() → QUBO matrix (numpy)
 ## Install
 
 ```bash
-pip install qubify
+pip install git+https://github.com/LehaoLin/qubify.git
 ```
 
 Dev install with tests:
 
 ```bash
-pip install qubify[dev]
+git clone https://github.com/LehaoLin/qubify.git
+cd qubify
+pip install -e ".[dev]"
 pytest tests/
 ```
 
