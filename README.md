@@ -2,12 +2,15 @@
 
 > **qubify = make it QUBO**
 
+[![PyPI](https://img.shields.io/pypi/v/qubify)](https://pypi.org/project/qubify/)
+[![Python](https://img.shields.io/pypi/pyversions/qubify)](https://pypi.org/project/qubify/)
+[![License](https://img.shields.io/pypi/l/qubify)](https://github.com/LehaoLin/qubify/blob/master/LICENSE)
+
 A constraint-to-QUBO compiler for quantum optimization. Convert optimization problems into QUBO matrices — no hardware lock-in, no solver dependency. Feed the output to CIM, D-Wave, Fujitsu DA, simulated annealing, or any QUBO solver.
 
 ```bash
-pip install git+https://github.com/LehaoLin/qubify.git
+pip install qubify
 ```
-*(Coming to PyPI — `pip install qubify` — once published.)*
 
 ---
 
@@ -159,16 +162,14 @@ Problem (dict) → qubify() → QUBO matrix (numpy)
 ## Install
 
 ```bash
-pip install git+https://github.com/LehaoLin/qubify.git
+pip install qubify
 ```
 
 Dev install with tests:
 
 ```bash
-git clone https://github.com/LehaoLin/qubify.git
-cd qubify
-pip install -e ".[dev]"
-pytest tests/
+pip install qubify[dev]
+pytest --pyargs qubify
 ```
 
 ---
