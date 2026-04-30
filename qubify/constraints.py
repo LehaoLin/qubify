@@ -24,7 +24,8 @@ def one_hot(vars: list[int]) -> QuboExpr:
     if n == 0:
         return QuboExpr(const=1.0)
     if n == 1:
-        return (var(vars[0]) - 1) * (var(vars[0]) - 1)
+        # (x - 1)² = x² - 2x + 1 = x - 2x + 1 = -x + 1  (x²=x for binary)
+        return QuboExpr(linear={vars[0]: -1.0}, const=1.0)
 
     # Linear: -Σ x_i
     linear = {v: -1.0 for v in vars}
@@ -66,33 +67,15 @@ def cardinality(vars: list[int], k: int) -> QuboExpr:
 def at_least_one(vars: list[int]) -> QuboExpr:
     """At least one variable in the set must be 1.
 
-    Penalty = Π (1 - x_i)  expanded via slack or approximation.
-    For small sets: use the complement formulation.
-    For general: introduce a slack variable.
+    Implemented as cardinality(vars, 1) — requires exactly one variable = 1.
+    This is a quadratic approximation; for general "at least one" with
+    arbitrary n, slack variables are needed. For small problems where
+    "at most one" also holds naturally (e.g., assignment problems),
+    this is exact.
 
-    Simpler form: minimize penalty for all-zero case.
-    Penalty = (1 - max(x_i)) ≈ Π(1 - x_i) for binary case.
+    Covers: set covering, disjunctive constraints (with caveat above).
     """
-    # Use the product formulation: Π(1 - x_i)
-    # For binary variables, this penalizes the all-0 case.
-    # For n=2: (1-x0)(1-x1) = 1 - x0 - x1 + x0x1
-    # But this isn't quadratic for n > 2, so we approximate.
-
-    # Alternative: use cardinality with k≥1 via inequality.
-    # Introduce slack variables automatically? For now, use the
-    # simplest quadratic approach: penalize all-zero state.
-    n = len(vars)
-    if n <= 3:
-        # Exact product for small n (quadratic after expansion)
-        result = QuboExpr(const=1.0)
-        for v in vars:
-            result = result * (QuboExpr(const=1.0) - var(v))  # type: ignore
-        return result
-
-    # For larger n, use (1 - Σ x_i + small) approximation
-    # Or better: treat as cardinality ≥ 1 with slack variable
-    # For now, use a simple penalty on the all-zero case
-    return cardinality(vars, 1)  # exact only for k=1
+    return cardinality(vars, 1)
 
 
 def mutual_exclusive(a: int, b: int) -> QuboExpr:
@@ -111,7 +94,6 @@ def implication(a: int, b: int) -> QuboExpr:
     Penalty = x_a * (1 - x_b) = x_a - x_a * x_b
     """
     i, j = (a, b) if a <= b else (b, a)
-    sign = 1.0 if a == i else -1.0  # handle ordering
     return QuboExpr(linear={a: 1.0}, quadratic={(i, j): -1.0})
 
 

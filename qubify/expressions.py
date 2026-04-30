@@ -7,7 +7,6 @@ where x_i ∈ {0, 1} and Q is upper-triangular (i ≤ j).
 """
 
 import numpy as np
-from itertools import combinations
 
 
 class QuboExpr:

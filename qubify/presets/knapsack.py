@@ -5,7 +5,8 @@ Given n items with values and weights, and a capacity C,
 returns a QUBO matrix for the knapsack problem.
 
 Variable encoding: x_i = 1 if item i is selected, 0 otherwise.
-Total variables: n.
+Slack variables: s_k for k = 0..slack_bits-1 encode capacity remainder.
+Total variables: n + slack_bits.
 """
 
 import numpy as np
@@ -32,36 +33,15 @@ def knapsack(values, weights, capacity, slack_bits=4):
     C = float(capacity)
 
     # Objective: maximize Σ v_i * x_i  →  minimize -Σ v_i * x_i
+    # Capacity baked into objective via penalty expansion
+    slack_start = n
+    total_vars = n + slack_bits
+
     objective = []
     for i in range(n):
         objective.append({"coeff": -vals[i], "vars": [i]})
 
-    # Capacity constraint: Σ w_i * x_i ≤ C
-    # Use slack variable encoding: Σ w_i * x_i + Σ 2^k * s_k = C
-    # Total variables: n items + slack_bits slack variables
-    slack_start = n
-    total_vars = n + slack_bits
-
-    # Objective: add nothing for slack vars (they don't affect value)
-    # They appear only in constraints.
-
-    # Constraint: Σ w_i * x_i + Σ 2^k * s_k = C
-    # Rewrite as cardinality over weighted terms isn't directly supported,
-    # so we use equality: Σ_i w_i * x_i + Σ_k 2^k * s_k - C = 0
-    #
-    # Since our constraints work on binary variables directly, we need to
-    # encode the weighted sum as a quadratic penalty:
-    #   (Σ w_i*x_i + Σ 2^k*s_k - C)²
-    #
-    # Expand by hand:
-    # Objective terms already in `objective`.
-    # Cross terms between items and slack vars.
-    # Diagonal terms from (w_i*x_i)² = w_i²*x_i  (since x_i² = x_i)
-    # Diagonal terms from (2^k*s_k)² = 4^k*s_k
-    # Cross terms: 2*w_i*2^k * x_i*s_k = 2^(k+1)*w_i * x_i*s_k
-    # Cross terms between items: 2*w_i*w_j * x_i*x_j
-    # Cross terms between slacks: 2*2^k*2^l * s_k*s_l = 2^(k+l+1) * s_k*s_l
-
+    # Capacity constraint as quadratic penalty: (Σ w_i*x_i + Σ 2^k*s_k - C)²
     for i in range(n):
         # Diagonal: w_i² * x_i
         objective.append({"coeff": wts[i] ** 2, "vars": [i]})
@@ -113,3 +93,57 @@ def knapsack(values, weights, capacity, slack_bits=4):
         "constraints": [],
     }
     return qubify(problem)
+
+
+def knapsack_decode(solution, slack_bits=4):
+    """Decode a binary solution vector from Knapsack QUBO.
+
+    Args:
+        solution: 1D array/list of n + slack_bits binary values.
+                  First n values are item selections (x_i).
+                  Remaining values are slack variables (ignored in decode).
+        slack_bits: Number of slack bits used in the encoding (default 4).
+
+    Returns:
+        dict with:
+            - "selected": list of indices of selected items
+            - "total_value": sum of values of selected items
+            - "total_weight": sum of weights of selected items
+
+    Example:
+        >>> sol = [1, 0, 1, 0, 0, 0, 0]  # n=3, slack_bits=4
+        >>> result = knapsack_decode(sol, slack_bits=4)
+        >>> result["selected"]  # → [0, 2]
+    """
+    sol = np.array(solution, dtype=float).flatten()
+    n = len(sol) - slack_bits
+
+    selected = [int(i) for i in range(n) if sol[i] >= 0.5]
+
+    return {
+        "selected": selected,
+        "total_value": None,  # caller must supply values to compute
+        "total_weight": None,  # caller must supply weights to compute
+    }
+
+
+def knapsack_decode_full(solution, values, weights, slack_bits=4):
+    """Decode a binary solution with value/weight computation.
+
+    Args:
+        solution: 1D array of n + slack_bits binary values.
+        values: list of item values.
+        weights: list of item weights.
+        slack_bits: Number of slack bits.
+
+    Returns:
+        dict with "selected", "total_value", "total_weight", "capacity_used".
+    """
+    result = knapsack_decode(solution, slack_bits)
+    vals = np.array(values, dtype=float)
+    wts = np.array(weights, dtype=float)
+
+    idxs = result["selected"]
+    result["total_value"] = float(np.sum(vals[idxs]))
+    result["total_weight"] = float(np.sum(wts[idxs]))
+    return result

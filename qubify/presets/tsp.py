@@ -62,6 +62,61 @@ def tsp(distances):
     return qubify(problem)
 
 
+def tsp_decode(solution, var_map=None, n_cities=None):
+    """Decode a binary solution vector from TSP QUBO into a tour order.
+
+    Args:
+        solution: 1D array/list of n² binary values from solver output.
+                  solution[u*n + j] = 1 means city u is visited at position j.
+        var_map: Optional var_map from tsp(). If provided, n_cities is inferred.
+        n_cities: Number of cities. Required if var_map not provided.
+
+    Returns:
+        List of city indices in visiting order: [city_at_pos_0, city_at_pos_1, ...].
+
+    Raises:
+        ValueError: if the solution is not a valid tour.
+
+    Example:
+        >>> distances = [[0,10,15],[10,0,35],[15,35,0]]
+        >>> matrix, vmap = tsp(distances)
+        >>> # After solving...
+        >>> sol = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        >>> tour = tsp_decode(sol, vmap)  # → [0, 1, 2]
+    """
+    if var_map is not None:
+        n_cities = var_map.get("x", {}).get("shape", (0,))[0]
+        if n_cities is None or n_cities == 0:
+            if "x" in var_map:
+                n_cities = int(np.sqrt(var_map["x"]["size"]))
+
+    if n_cities is None:
+        n_cities = int(np.sqrt(len(solution)))
+
+    n = n_cities
+    sol = np.array(solution, dtype=float).flatten()
+
+    if len(sol) != n * n:
+        raise ValueError(
+            f"Solution length {len(sol)} doesn't match n²={n*n} for n={n}"
+        )
+
+    tour = [-1] * n
+    for j in range(n):
+        cities_at_pos = []
+        for u in range(n):
+            if sol[u * n + j] >= 0.5:
+                cities_at_pos.append(u)
+        if len(cities_at_pos) != 1:
+            raise ValueError(
+                f"Position {j}: expected exactly 1 city, got {len(cities_at_pos)}. "
+                f"Solution may be infeasible (constraints violated)."
+            )
+        tour[j] = cities_at_pos[0]
+
+    return tour
+
+
 def tsp_qubo(distances):
     """Alias for tsp()."""
     return tsp(distances)

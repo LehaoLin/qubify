@@ -56,3 +56,44 @@ def maxcut(adjacency):
         "constraints": [],
     }
     return qubify(problem)
+
+
+def maxcut_decode(solution, adjacency=None):
+    """Decode a binary solution vector from Max-Cut into two partitions.
+
+    Args:
+        solution: 1D array/list of n binary values from solver output.
+                  solution[i] = 1 → node i in partition A.
+                  solution[i] = 0 → node i in partition B.
+        adjacency: Optional adjacency matrix. If provided, computes cut value.
+
+    Returns:
+        If adjacency is None:
+            (partition_A, partition_B) — two lists of node indices.
+        If adjacency is provided:
+            (partition_A, partition_B, cut_value) — includes the cut weight.
+
+    Example:
+        >>> adj = [[0,1,0],[1,0,1],[0,1,0]]
+        >>> matrix, _ = maxcut(adj)
+        >>> sol = [1, 0, 1]
+        >>> A, B = maxcut_decode(sol)  # A=[0,2], B=[1]
+        >>> A, B, val = maxcut_decode(sol, adj)  # val=2
+    """
+    sol = np.array(solution, dtype=float).flatten()
+    n = len(sol)
+
+    partition_A = [int(i) for i in range(n) if sol[i] >= 0.5]
+    partition_B = [int(i) for i in range(n) if sol[i] < 0.5]
+
+    if adjacency is not None:
+        adj = np.array(adjacency, dtype=float)
+        cut_value = 0.0
+        set_a = set(partition_A)
+        for i in range(n):
+            for j in range(i + 1, n):
+                if (i in set_a) != (j in set_a):  # i and j are in different sets
+                    cut_value += adj[i, j]
+        return partition_A, partition_B, cut_value
+
+    return partition_A, partition_B

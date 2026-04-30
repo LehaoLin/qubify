@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/qubify)](https://pypi.org/project/qubify/)
 [![Python](https://img.shields.io/pypi/pyversions/qubify)](https://pypi.org/project/qubify/)
 [![License](https://img.shields.io/pypi/l/qubify)](https://github.com/LehaoLin/qubify/blob/master/LICENSE)
+[![Test](https://github.com/LehaoLin/qubify/actions/workflows/test.yml/badge.svg)](https://github.com/LehaoLin/qubify/actions/workflows/test.yml)
 
 A constraint-to-QUBO compiler for quantum optimization. Convert optimization problems into QUBO matrices — no hardware lock-in, no solver dependency. Feed the output to CIM, D-Wave, Fujitsu DA, simulated annealing, or any QUBO solver.
 
@@ -132,7 +133,43 @@ Reference variables in objectives and constraints by:
 | **Max-Cut** | `maxcut(adjacency)` | n | none |
 | **Knapsack** | `knapsack(v, w, C)` | n + slack | capacity (via objective) |
 
-More presets coming: graph coloring, scheduling, portfolio optimization, set covering.
+## Solution Decoding
+
+Each preset provides a decoder to turn raw solver output back into human-readable answers:
+
+```python
+from qubify.presets import tsp, maxcut, knapsack
+from qubify.presets import tsp_decode, maxcut_decode, knapsack_decode_full
+
+# TSP: binary vector → tour order
+matrix, varmap = tsp(distances)
+# ... solve ...
+solution = [1, 0, 0, 0, 1, 0, 0, 0, 1]  # from solver
+tour = tsp_decode(solution, var_map=varmap)  # → [0, 1, 2]
+
+# Max-Cut: binary vector → two partitions + cut value
+A, B, cut_value = maxcut_decode([1, 0, 1], adjacency=adj)
+
+# Knapsack: binary vector → selected items + totals
+result = knapsack_decode_full(solution, values, weights)
+# → {"selected": [0, 2], "total_value": 180.0, "total_weight": 40.0}
+```
+
+## QUBO ↔ Ising Conversion
+
+Most quantum solvers (CIM, D-Wave) expect **Ising** form (s ∈ {-1, +1}), not QUBO (x ∈ {0, 1}). Convert in one call:
+
+```python
+from qubify import qubo_to_ising
+
+J, h, offset = qubo_to_ising(qubo_matrix)
+# J: coupling matrix (upper triangular), h: biases, offset: energy shift
+
+# Now feed to any Ising solver
+import kaiwu as kw
+opt = kw.cim.CIMOptimizer(task_name="my-problem", wait=True)
+solution = opt.solve(J, h)  # Ising form
+```
 
 ---
 

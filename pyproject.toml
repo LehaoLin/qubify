@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qubify"
-version = "0.1.0"
+version = "0.2.0"
 description = "qubify = make it QUBO — a constraint-to-QUBO compiler for quantum optimization"
 readme = "README.md"
 license = "MIT"

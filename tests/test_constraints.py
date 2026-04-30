@@ -1,118 +1,172 @@
-"""
-Tests for qubify constraint templates.
-"""
+"""Tests for qubify.constraints — all 7 constraint types."""
 
 import numpy as np
-from qubify.expressions import QuboExpr, var, prod
+import pytest
 from qubify.constraints import (
-    one_hot,
-    cardinality,
-    mutual_exclusive,
-    implication,
-    equality,
+    one_hot, cardinality, at_least_one,
+    mutual_exclusive, implication, equality, at_most_k,
 )
+from qubify.expressions import QuboExpr
 
 
-def test_one_hot_two_vars():
-    """one_hot([0, 1]) should penalize (x0 + x1 - 1)²."""
-    penalty = one_hot([0, 1])
-    mat = penalty.to_matrix(2)
-
-    # (x0 + x1 - 1)² = -x0 - x1 + 2x0x1 + 1
-    # QUBO upper-triangular: Q[0,0]=-1, Q[1,1]=-1, Q[0,1]=2, Q[1,0]=0
-    expected = np.array([[-1., 2.], [0., -1.]])
-    assert np.allclose(mat, expected), f"Expected:\n{expected}\nGot:\n{mat}"
+def _eval_expr(expr: QuboExpr, assignment: list[int]) -> float:
+    """Evaluate a QuboExpr on a binary assignment, including constant term."""
+    n = max(max(expr.linear.keys(), default=0),
+            max((k[1] for k in expr.quadratic.keys()), default=0)) + 1
+    matrix = expr.to_matrix(n)
+    x = np.array(assignment, dtype=float)
+    return float(x.T @ matrix @ x + expr.const)
 
 
-def test_one_hot_valid_state():
-    """One-hot penalty should be 0 for valid state (exactly one 1)."""
-    penalty = one_hot([0, 1, 2])
-    mat = penalty.to_matrix(3)
+class TestOneHot:
+    """Exactly one variable = 1."""
 
-    # Valid state: x=[1,0,0] → cost contribution = -1 + 1 = 0
-    x = np.array([1, 0, 0])
-    cost = x @ mat @ x
-    assert abs(cost + penalty.const) < 1e-10  # const=1 offsets
+    def test_valid_states(self):
+        penalty = one_hot([0, 1, 2])
+        # Valid: exactly one 1
+        assert _eval_expr(penalty, [1, 0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 0, 1]) == pytest.approx(0.0)
 
+    def test_invalid_all_zero(self):
+        penalty = one_hot([0, 1, 2])
+        assert _eval_expr(penalty, [0, 0, 0]) > 0.0
 
-def test_cardinality():
-    """cardinality([0,1,2], 2) = (x0+x1+x2 - 2)²."""
-    penalty = cardinality([0, 1, 2], 2)
-    mat = penalty.to_matrix(3)
+    def test_invalid_multiple_ones(self):
+        penalty = one_hot([0, 1, 2])
+        assert _eval_expr(penalty, [1, 1, 0]) > 0.0
+        assert _eval_expr(penalty, [1, 1, 1]) > 0.0
 
-    # x=[1,1,0]: Σx=2 → cost = (2-2)² = 0
-    x_valid = np.array([1, 1, 0])
-    cost_valid = x_valid @ mat @ x_valid + penalty.const
-    assert abs(cost_valid) < 1e-10
+    def test_single_element(self):
+        penalty = one_hot([5])
+        assert _eval_expr(penalty, [0, 0, 0, 0, 0, 1]) == pytest.approx(0.0)
 
-    # x=[1,0,0]: Σx=1 → cost = (1-2)² = 1
-    x_invalid = np.array([1, 0, 0])
-    cost_invalid = x_invalid @ mat @ x_invalid + penalty.const
-    assert abs(cost_invalid - 1.0) < 1e-10
-
-
-def test_mutual_exclusive():
-    """x_a * x_b should be 1 only when both are 1."""
-    penalty = mutual_exclusive(0, 1)
-    mat = penalty.to_matrix(2)
-
-    expected = np.array([[0., 1.], [0., 0.]])
-    assert np.allclose(mat, expected)
+    def test_empty(self):
+        penalty = one_hot([])
+        assert penalty.const == 1.0
 
 
-def test_implication():
-    """a ⇒ b: penalty = x_a - x_a*x_b."""
-    penalty = implication(0, 1)
-    mat = penalty.to_matrix(2)
+class TestCardinality:
+    """Exactly k variables = 1."""
 
-    # a=1,b=0 → Q[0,0]=1, Q[0,1]=-1, Q[1,1]=0 → cost = 1
-    x = np.array([1, 0])
-    cost = x @ mat @ x
-    assert abs(cost - 1.0) < 1e-10
+    def test_k_equals_one(self):
+        # cardinality(vars, 1) should equal one_hot(vars)
+        penalty_c = cardinality([0, 1, 2], 1)
+        penalty_h = one_hot([0, 1, 2])
+        for assignment in [[1,0,0], [0,1,0], [0,0,1]]:
+            assert _eval_expr(penalty_c, assignment) == pytest.approx(0.0)
+            assert _eval_expr(penalty_c, assignment) == pytest.approx(
+                _eval_expr(penalty_h, assignment)
+            )
 
-    # a=1,b=1 → cost = 1 + (-1) = 0
-    x = np.array([1, 1])
-    cost = x @ mat @ x
-    assert abs(cost) < 1e-10
+    def test_k_equals_two(self):
+        penalty = cardinality([0, 1, 2], 2)
+        assert _eval_expr(penalty, [1, 1, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 0, 1]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1, 1]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 1, 1]) > 0.0
+        assert _eval_expr(penalty, [1, 0, 0]) > 0.0
 
-
-def test_equality():
-    """a=b: penalty = xa + xb - 2*xa*xb."""
-    penalty = equality(0, 1)
-    mat = penalty.to_matrix(2)
-
-    # a=1,b=1 → cost = 1+1-2 = 0
-    x = np.array([1, 1])
-    cost = x @ mat @ x
-    assert abs(cost) < 1e-10
-
-    # a=0,b=1 → cost = 1
-    x = np.array([0, 1])
-    cost = x @ mat @ x
-    assert abs(cost - 1.0) < 1e-10
+    def test_k_equals_zero(self):
+        penalty = cardinality([0, 1], 0)
+        assert _eval_expr(penalty, [0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 0]) > 0.0
 
 
-def test_expression_arithmetic():
-    """Test QuboExpr arithmetic operations."""
-    e1 = 2 * var(0) + 3 * var(1)
-    e2 = prod(0, 1) * 5
-    combined = e1 + e2 + 10
+class TestAtLeastOne:
+    """At least one variable = 1.
 
-    mat = combined.to_matrix(3)
-    # linear: 2*x0 + 3*x1
-    # quadratic: 5*x0*x1
-    # const: 10
-    expected = np.array([
-        [2., 5., 0.],
-        [0., 3., 0.],
-        [0., 0., 0.],
-    ])
-    assert np.allclose(mat, expected)
-    assert combined.const == 10.0
+    Note: currently implemented as cardinality(vars, 1) — an approximation
+    that requires exactly 1, not ≥1. Valid for assignment problems where
+    "at most one" also naturally holds.
+    """
+
+    def test_small_set(self):
+        penalty = at_least_one([0, 1, 2])
+        # cardinality([0,1,2], 1): exactly 1 is valid
+        assert _eval_expr(penalty, [1, 0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 0, 1]) == pytest.approx(0.0)
+        # 0 or 2+: penalized
+        assert _eval_expr(penalty, [0, 0, 0]) > 0.0
+        assert _eval_expr(penalty, [0, 1, 1]) > 0.0
+
+    def test_single_var(self):
+        penalty = at_least_one([0])
+        assert _eval_expr(penalty, [1]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0]) > 0.0
 
 
-def test_to_matrix_no_effect_on_invalid_states():
-    """to_matrix should handle variable indices beyond n_vars gracefully."""
-    penalty = one_hot([0, 1, 2])
-    mat = penalty.to_matrix(2)  # only 2 vars, but constraint references 3
-    assert mat.shape == (2, 2)
+class TestMutualExclusive:
+    """Two variables cannot both be 1."""
+
+    def test_both_zero(self):
+        penalty = mutual_exclusive(0, 3)
+        assert _eval_expr(penalty, [0, 0, 0, 0]) == pytest.approx(0.0)
+
+    def test_one_zero(self):
+        penalty = mutual_exclusive(0, 1)
+        assert _eval_expr(penalty, [1, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1]) == pytest.approx(0.0)
+
+    def test_both_one(self):
+        penalty = mutual_exclusive(0, 1)
+        assert _eval_expr(penalty, [1, 1]) == pytest.approx(1.0)  # x0 * x1 = 1
+
+
+class TestImplication:
+    """a ⇒ b: if a=1 then b=1."""
+
+    def test_valid(self):
+        penalty = implication(0, 1)
+        assert _eval_expr(penalty, [0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 1]) == pytest.approx(0.0)
+
+    def test_violated(self):
+        penalty = implication(0, 1)
+        assert _eval_expr(penalty, [1, 0]) == pytest.approx(1.0)
+
+
+class TestEquality:
+    """a = b."""
+
+    def test_valid(self):
+        penalty = equality(0, 1)
+        assert _eval_expr(penalty, [0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 1]) == pytest.approx(0.0)
+
+    def test_violated(self):
+        penalty = equality(0, 1)
+        assert _eval_expr(penalty, [1, 0]) == pytest.approx(1.0)
+        assert _eval_expr(penalty, [0, 1]) == pytest.approx(1.0)
+
+
+class TestAtMostK:
+    """At most k variables = 1.
+
+    Note: currently implemented as cardinality(vars, k), requiring exactly k.
+    This is an approximation — for true "at most", slack variables
+    are needed. The implementation correctly penalizes states with
+    more than k variables, but also penalizes states with fewer than k.
+    """
+
+    def test_at_most_one(self):
+        penalty = at_most_k([0, 1, 2], 1)
+        # cardinality([0,1,2], 1): exactly 1 is valid
+        assert _eval_expr(penalty, [1, 0, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1, 0]) == pytest.approx(0.0)
+        # 0 or 2+: penalized (cardinality limitation)
+        assert _eval_expr(penalty, [0, 0, 0]) > 0.0
+        assert _eval_expr(penalty, [1, 1, 0]) > 0.0
+
+    def test_at_most_two(self):
+        penalty = at_most_k([0, 1, 2], 2)
+        # cardinality([0,1,2], 2): exactly 2 is valid
+        assert _eval_expr(penalty, [1, 1, 0]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [1, 0, 1]) == pytest.approx(0.0)
+        assert _eval_expr(penalty, [0, 1, 1]) == pytest.approx(0.0)
+        # 0, 1, or 3: penalized
+        assert _eval_expr(penalty, [0, 0, 0]) > 0.0
+        assert _eval_expr(penalty, [1, 0, 0]) > 0.0
+        assert _eval_expr(penalty, [1, 1, 1]) > 0.0

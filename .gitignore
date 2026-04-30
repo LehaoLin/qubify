@@ -1,7 +1,31 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.egg-info/
 dist/
 build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
 .pytest_cache/
-*.so
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# qubify local
+/dist/
+/qubify.egg-info/

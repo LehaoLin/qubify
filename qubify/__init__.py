@@ -21,8 +21,17 @@ Or use presets:
 
 from qubify.compiler import qubify
 from qubify.expressions import QuboExpr, var, prod
+from qubify.utils import qubo_to_ising
 from qubify import constraints
 from qubify import presets
 
-__version__ = "0.1.0"
-__all__ = ["qubify", "QuboExpr", "var", "prod", "constraints", "presets"]
+__version__ = "0.2.0"
+__all__ = [
+    "qubify",
+    "QuboExpr",
+    "var",
+    "prod",
+    "qubo_to_ising",
+    "constraints",
+    "presets",
+]
