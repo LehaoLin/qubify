@@ -7,7 +7,8 @@ name = "qubify"
 version = "0.1.0"
 description = "qubify = make it QUBO — a constraint-to-QUBO compiler for quantum optimization"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE*"]
 requires-python = ">=3.10"
 authors = [
     {name = "Lehao Lin", email = "lehaolin@lehao.xyz"},
@@ -18,7 +19,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "numpy>=1.24",
