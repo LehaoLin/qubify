@@ -1,0 +1,58 @@
+"""
+Max-Cut problem preset.
+
+Given an n × n adjacency matrix of an undirected graph,
+returns a QUBO matrix for the Max-Cut problem.
+
+Variable encoding: x_i = 1 if node i is in partition A, 0 if in partition B.
+Total variables: n.
+"""
+
+import numpy as np
+
+
+def maxcut(adjacency):
+    """Convert a Max-Cut instance to QUBO matrix.
+
+    Args:
+        adjacency: n × n adjacency or weight matrix (undirected).
+                   adjacency[i][j] = weight of edge (i, j), 0 if no edge.
+
+    Returns:
+        (QUBO_matrix, var_map)
+    """
+    from qubify.compiler import qubify
+
+    W = np.array(adjacency, dtype=float)
+    n = W.shape[0]
+
+    # Max-Cut QUBO formulation:
+    # For each edge (i, j) with weight w, the contribution to the cut is
+    # w * (x_i + x_j - 2*x_i*x_j) when x_i, x_j are in different sets.
+    #
+    # Since we minimize: minimize Σ_{i<j} -w_{ij}*(x_i + x_j - 2*x_i*x_j)
+    #                 = minimize Σ_{i<j} w_{ij}*(2*x_i*x_j - x_i - x_j)
+    #
+    # Linear term for x_i: -Σ_{j≠i} w_{ij}
+    # Quadratic term for (i, j): 2*w_{ij} * x_i * x_j
+
+    objective = []
+    for i in range(n):
+        total_weight = 0.0
+        for j in range(n):
+            if i != j:
+                total_weight += W[i, j]
+        objective.append({"coeff": -total_weight, "vars": [i]})
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if W[i, j] != 0:
+                objective.append({"coeff": 2.0 * W[i, j], "vars": [i, j]})
+
+    # Max-Cut has no constraints — it's a pure quadratic optimization
+    problem = {
+        "variables": {"x": ("binary", (n,))},
+        "objective": objective,
+        "constraints": [],
+    }
+    return qubify(problem)
